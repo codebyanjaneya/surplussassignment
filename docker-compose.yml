@@ -1,0 +1,53 @@
+x-backend: &backend
+  build: ./backend
+  depends_on:
+    db:
+      condition: service_healthy
+  environment: &backend-env
+    DATABASE_URL: postgres://postgres:postgres@db:5432/webhooks
+    TEST_DATABASE_URL: postgres://postgres:postgres@db:5432/webhooks_test
+    MAX_ATTEMPTS: "5"          # attempts per retry budget before permanent failure
+    BACKOFF_BASE_SECONDS: "2"  # 2s, 4s, 8s, ... (+-20% jitter)
+    BACKOFF_CAP_SECONDS: "60"
+    LEASE_SECONDS: "15"        # claim expires if the worker stops heartbeating
+    HEARTBEAT_SECONDS: "5"
+    WORKER_CONCURRENCY: "4"    # parallel events per worker process
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: webhooks
+    ports: ["5433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d webhooks"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  backend:
+    <<: *backend
+    ports: ["3001:3001"]
+    command: ["node", "dist/main.js"]
+
+  worker-1:
+    <<: *backend
+    command: ["node", "dist/worker/main.js"]
+    environment:
+      <<: *backend-env
+      WORKER_ID: worker-1
+
+  worker-2:
+    <<: *backend
+    command: ["node", "dist/worker/main.js"]
+    environment:
+      <<: *backend-env
+      WORKER_ID: worker-2
+
+  frontend:
+    build: ./frontend
+    ports: ["3000:3000"]
+    environment:
+      BACKEND_URL: http://backend:3001
+    depends_on: [backend]

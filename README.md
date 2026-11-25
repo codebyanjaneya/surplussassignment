@@ -88,11 +88,10 @@ at runtime, so the browser only talks to one origin.
 * The schema is `CREATE TABLE IF NOT EXISTS`: fine for this scope, but there is no versioned migration path.
 * No auth on the API or the retry endpoint. The ops page polls every 1.5s (no websockets) and shows the
   latest 200 events.
-* **Verification gap:** I ran the tests and every demo scenario (including `kill -9` of a worker process and
-  the 500-event burst) against a local Postgres with the API and two worker processes started by hand.
-  I could not run `docker compose up` itself (no Docker daemon available when I built this), so the
-  compose file and Dockerfiles are untested, and `demo.sh crash` (which uses `docker kill`) has only been
-  exercised with `kill -9` equivalents.
+* **Verified how:** from a clean clone, `docker compose up --build` starts all five containers; the duplicate,
+  parallel, worker-crash (`docker kill` on the container holding a `slow:30` event) and 500-event burst
+  scenarios behave as described above, and the 8 tests pass inside the backend container. Not run:
+  anything beyond a single Docker host (e.g. Postgres failover, network partitions between worker and db).
 
 ## Decisions where the brief was open
 * `MAX_ATTEMPTS` = total attempts per budget (5), not "retries after the first".
